@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/11/2013
+" Last Updated: 01/15/2013
 "
 " This class defines a consumer singleton that can be used to provide the
 " underlying RabbitMQ connection interface for receiving messages.
@@ -18,6 +18,8 @@ from config import Config as CONFIG
 class ConsumerNameError( Exception ):
     pass
 
+class ChannelNotFound( Exception ):
+    pass
 
 class ConsumerPool(object):
     """
@@ -44,7 +46,6 @@ class ConsumerPool(object):
                                                     on_open_callback=self._on_connection_open )
 
         self._connection.add_on_close_callback( self._on_connection_closed )
-        print 'Done with connect'
 
 
     def _gen_channel_name(self, func):
@@ -79,9 +80,7 @@ class ConsumerPool(object):
 
         """
 #        LOGGER.info('Connection opened')
-        print 'In _on_connection_open'
         self.reconnect_channels()
-        print 'Out _on_connection_open'
 
 
     def reconnect_channel( self, name ):
@@ -91,19 +90,15 @@ class ConsumerPool(object):
         """
         #this needs to be able to get a channel from the connection and then
         #re-bind it to a specified queue
-        print 'in reconnect_channel'
         self.register_consumer( self.channels[ name ][ 'callback' ], self.channels[ name ]['routing_key'] )
-        print 'out reconnect_channel'
 
 
     def reconnect_channels( self ):
         """
         Reconnects all channels in the consumer pool.
         """
-        print 'in reconnect_channel[s]'
         for name in self.channels:
             self.reconnect_channel( name )
-        print 'out reconnect_channel[s]'
 
     def close_connection(self):
         """
@@ -149,7 +144,7 @@ class ConsumerPool(object):
         func
             the function to start consuming on.
         """
-        self.start_consumers( name=self._gen_channel_name( func.__name__ ) )
+        self.start_consumers( name=self._gen_channel_name( func ) )
 
 
     def channel_exists(self, name):
@@ -161,12 +156,31 @@ class ConsumerPool(object):
         else:
             return False
 
+    def get_consumer_channel_by_func(self, func):
+        """
+        Returns the consumer channel based on the registered function.
+
+        func
+            The function that the consumer was registered with.
+        """
+        return self.get_consumer_channel( self._gen_channel_name( func ) )
+
+    def get_consumer_channel(self, name):
+        """
+        Retuns the consumer channel based on the registered name.
+
+        name
+            The name of the registered consumer.
+        """
+        if name in self.channels:
+            return self.channels[name]['channel']
+        else:
+            raise ChannelNotFound( '%s is not a known channel name' % name )
 
     def register_consumer(self, func, routing_key ):
         """
         Sets up all items we need for a channel to start consuming based on the name of the func and the routing_key.
         """
-        print 'In register_consumer'
         channel = self._connection.channel()
         channel.exchange_declare( exchange=self._exchange_name, type=self._exchange_type )
 
@@ -189,7 +203,6 @@ class ConsumerPool(object):
         #Store this information so that we have it again in the case that the channel is closed unexpectedly and we
         #need to re-construct this interface
         self.channels[ channel_name ] = {'channel':channel, 'queue':queue, 'routing_key':routing_key, 'callback':func }
-        print 'Out register_consumer'
 
 
     def consumer(self, routing_key):
