@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/10/2013
+" Last Updated: 01/11/2013
 "
 " This class defines a consumer singleton that can be used to provide the
 " underlying RabbitMQ connection interface for receiving messages.
@@ -18,7 +18,8 @@ from config import Config as CONFIG
 class ConsumerNameError( Exception ):
     pass
 
-class BlockingConsumer(object):
+
+class ConsumerPool(object):
     """
     Consumer object the holds a connection to rabbitmq, and all channels that message
     consumers are subscriped to queues on.
@@ -26,40 +27,172 @@ class BlockingConsumer(object):
     This class gets most of it's benefit by providing a decorator function that allows functions
     to register with this consumer object on specificed routing_keys.
     """
-    conn_params = pika.ConnectionParameters( CONFIG.host )
-    conn = pika.BlockingConnection( conn_params )
-    exchange_name = CONFIG.exchange_name
-    exchange_type = CONFIG.exchange_type
-
-
     def __init__(self):
-        self.channels = defaultdict( list )
+        self.channels = {}
+
+        self._conn_params = pika.ConnectionParameters( CONFIG.host )
+
+        self._exchange_name = CONFIG.exchange_name
+        self._exchange_type = CONFIG.exchange_type
+    
+
+    def connect( self ):
+        """
+        Creates a connectino with rabbitmq.
+        """
+        self._connection = pika.BlockingConnection( parameters = self._conn_params, 
+                                                    on_open_callback=self._on_connection_open )
+
+        self._connection.add_on_close_callback( self._on_connection_closed )
+        print 'Done with connect'
 
 
-    def start_channels(self, name=None):
+    def _gen_channel_name(self, func):
+        """
+        Generates a channel name based off the function that was registered as a consumer.
+        This is attempted to be as unique as possible, because in the current implementation there
+        is only one channel and one queue per registered function.
+        """
+        return '.'.join( (getattr(func, '__module__', '' ), func.__name__) )
+    
+
+    def _on_connection_closed(self, method_frame):
+        """This method is invoked by pika when the connection to RabbitMQ is
+        closed unexpectedly. Since it is unexpected, we will reconnect to
+        RabbitMQ if it disconnects.
+
+        method_frame
+            RabbitMQ method fram passed ot this callback
+        """
+#        LOGGER.warning('Server closed connection, reopening: (%s) %s',
+#                       method_frame.method.reply_code,
+#                       method_frame.method.reply_text)
+        self._connection = self.connect()
+
+
+    def _on_connection_open(self, unused_connection):
+        """This method is called by pika once the connection to RabbitMQ has
+        been established. It passes the handle to the connection object in
+        case we need it, but in this case, we'll just mark it unused.
+
+        :type unused_connection: pika.SelectConnection
+
+        """
+#        LOGGER.info('Connection opened')
+        print 'In _on_connection_open'
+        self.reconnect_channels()
+        print 'Out _on_connection_open'
+
+
+    def reconnect_channel( self, name ):
+        """
+        Reconnect a single channel with the supplied name.  This creates a new channel (the old one
+        should have died) and binds it to the queue that matches that channel name.
+        """
+        #this needs to be able to get a channel from the connection and then
+        #re-bind it to a specified queue
+        print 'in reconnect_channel'
+        self.register_consumer( self.channels[ name ][ 'callback' ], self.channels[ name ]['routing_key'] )
+        print 'out reconnect_channel'
+
+
+    def reconnect_channels( self ):
+        """
+        Reconnects all channels in the consumer pool.
+        """
+        print 'in reconnect_channel[s]'
+        for name in self.channels:
+            self.reconnect_channel( name )
+        print 'out reconnect_channel[s]'
+
+    def close_connection(self):
+        """
+        Gracefully closes the connection with the rabbitmq server.  This closes this connection
+        as well as all the channels in the pool.
+        """
+        self._connection.close()
+
+
+    def kill_consumer(self, kill_queue=False):
+        """
+        This method kills a consumer and optionally complete destroys it's queue on the rabbitmq server so 
+        no messages can be pushed into it.
+        """
+        raise NotImplementedError
+
+
+    def start_consumers(self, name=None):
         """
         Starts channels for the specified name.  The name is mapped to the function name that 
         was registered
 
         Defaults to start consuming on all names if a name is not specified.
+
+        name
+            Name of the generated consumer channel.
         """
         if not name:
             for name in self.channels:
-                for channel in self.channels[name]:
-                    channel.start_consuming()
+                self.channels[name]['channel'].start_consuming()
         else:
             if not name in self.channels:
                 raise ConsumerNameError( 'Consumer named %s does not exist' % name )
             else:
-                for channel in self.channels[ name ]:
-                    channel.start_consuming()
+                self.channels[name]['channel'].start_consuming()
 
 
     def start_consumer_func(self, func):
-        self.start_channels( func.__name__ )
+        """
+        Starts the supplied consumer function.  This consumer function must be registered with this object
+        (through a decorator) prior to calling this function.
+
+        func
+            the function to start consuming on.
+        """
+        self.start_consumers( name=self._gen_channel_name( func.__name__ ) )
 
 
-    def consume(self, routing_key):
+    def channel_exists(self, name):
+        """
+        Returns true if an active channel exists (known and open), otherwise it returns false.
+        """
+        if name in self.channels:
+            return self.channels[name]['channel'].is_open
+        else:
+            return False
+
+
+    def register_consumer(self, func, routing_key ):
+        """
+        Sets up all items we need for a channel to start consuming based on the name of the func and the routing_key.
+        """
+        print 'In register_consumer'
+        channel = self._connection.channel()
+        channel.exchange_declare( exchange=self._exchange_name, type=self._exchange_type )
+
+        #Make a name for this queue that can be re-attached to at a later point in the case that the
+        #managing consumer dies.  Also, for our own management, attach this name to the channel we
+        #will be using to communicate with
+        channel_name = self._gen_channel_name( func )
+        if self.channel_exists( channel_name ):
+            #TODO - Close the channel and re-map everything
+            raise NotImplementedError
+
+        queue = channel.queue_declare( queue=channel_name )
+        channel.queue_bind( exchange=self._exchange_name, 
+                            queue=queue.method.queue, 
+                            routing_key=routing_key)
+
+        #Setup our callback as this function
+        channel.basic_consume( func, queue=queue.method.queue )
+
+        #Store this information so that we have it again in the case that the channel is closed unexpectedly and we
+        #need to re-construct this interface
+        self.channels[ channel_name ] = {'channel':channel, 'queue':queue, 'routing_key':routing_key, 'callback':func }
+        print 'Out register_consumer'
+
+
+    def consumer(self, routing_key):
         """
         Decorator function that will attach the decorated function to a RabbitMQ queue
         defined for the specified routing key.
@@ -77,16 +210,7 @@ class BlockingConsumer(object):
             The key defining the messages that the consumer will subscribe to.
         """
         def decorator(func):
-            channel = Consumer.conn.channel()
-            channel.exchange_declare( exchange=Consumer.exchange_name, type=Consumer.exchange_type )
-
-            #Make a name for this queue that can be re-attached to at a later point in the case that the
-            #managing consumer dies.
-            queue = channel.queue_declare( queue= '.'.join( getattr( func, '__module__', '' ), func.__name__ ) )
-            channel.queue_bind(exchange=Consumer.exchange_name, queue=queue.method.queue, routing_key=routing_key)
-            #Setup our callback as this function
-            channel.basic_consume( func, queue=queue.method.queue )
-            self.channels[ func.__name__ ].append( channel )
+            self.register_consumer( func, routing_key )
 
             @wraps(func)
             def wrapper(*args, **kwargs):
