@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/18/2013
+" Last Updated: 01/22/2013
 "
 """
 import json
@@ -30,6 +30,8 @@ class BaseProducer(object):
             key for the data source to bind this producer to. Defaults to the config file.
         """
         self.routing_key = kwargs.get( 'routing_key' )
+        if self.routing_key:
+            self.routing_key = self.routing_key.upper()
 
 
     def send_json( self, obj ):
@@ -64,6 +66,7 @@ class RabbitMQProducer( BaseProducer ):
         Sends the actual message to the broker.
         """
         key = kwargs.get( 'routing_key', self.routing_key )
+        key = key.upper()
         self.channel.basic_publish( exchange=self.exchange, routing_key=key, body=msg )
 
 
@@ -82,6 +85,7 @@ class S3Producer( BaseProducer ):
         Sends the message with a producer and then attempt to write it to our s3 bucket.
         """
         rkey = kwargs.get( 'routing_key', self.routing_key )
+        rkey = rkey.upper()
         try:
             s3key_name = self._create_key_name( rkey )
             s3key = self.bucket.new_key( key_name=s3key_name )

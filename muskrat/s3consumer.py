@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/18/2013
+" Last Updated: 01/22/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -63,7 +63,7 @@ class S3Consumer(object):
     def __init__(self, topic, func, name=None):
         self.s3conn = boto.connect_s3( CONFIG.s3_key, CONFIG.s3_secret )
         self.bucket = self.s3conn.get_bucket( CONFIG.s3_bucket )
-        self.topic = topic
+        self.topic = topic.upper()
         self.callback = func
         self._cursor = S3Cursor( self._gen_name( func ), atype=CONFIG.s3_cursor['type'] )
 

@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/15/2013
+" Last Updated: 01/22/2013
 "
 " This class defines a consumer singleton that can be used to provide the
 " underlying RabbitMQ connection interface for receiving messages.
@@ -181,6 +181,7 @@ class ConsumerPool(object):
         """
         Sets up all items we need for a channel to start consuming based on the name of the func and the routing_key.
         """
+        routing_key=routing_key.upper()
         channel = self._connection.channel()
         channel.exchange_declare( exchange=self._exchange_name, type=self._exchange_type )
 
