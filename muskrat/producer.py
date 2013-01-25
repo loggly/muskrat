@@ -73,20 +73,16 @@ class RabbitMQProducer( BaseProducer ):
         key = key.upper()
         self.channel.basic_publish( exchange=self.exchange, routing_key=key, body=msg )
 
-def async(func):
+def async_set_contents_from_string(anobj, msg ):
     class FuncRunner(threading.Thread):
-        def __init__(self, args, kwargs):
+        def __init__(self):
             super( FuncRunner, self ).__init__()
-            self.args = args
-            self.kwargs = kwargs
 
-            def run(self):
-                func(*(self.args), **(self.kwargs))
+        def run(self):
+            anobj.set_contents_from_string( msg )
 
-    def newfunc( *args, **kwargs ):
-        FuncRunner( args, kwargs ).start()
+    FuncRunner().start()
 
-    return wraps(func)(newfunc)
 
 class S3Producer( BaseProducer ):
     """
@@ -107,8 +103,7 @@ class S3Producer( BaseProducer ):
         try:
             s3key_name = self._create_key_name( rkey )
             s3key = self.bucket.new_key( key_name=s3key_name )
-            s3key.async_set_contents_from_string = async( s3key.__class__.set_contents_from_string )
-            s3key.async_set_contents_from_string( msg )
+            async_set_contents_from_string( s3key, msg )
         except:
             raise 
 
