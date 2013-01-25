@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/24/2013
+" Last Updated: 01/25/2013
 "
 """
 import json
@@ -121,6 +121,43 @@ class S3Producer( BaseProducer ):
         Generates a lifecycle policy on the s3 bucket.
         """
         pass
+
+
+class ThreadedS3Producer( S3Producer ):
+
+    class ThreadedS3Writer( threading.Thread ):
+        def __init__(self, queue):
+            super(ThreadedS3Writer, self).__init__()
+            self.queue = queue
+
+        def run(self):
+            msg, s3key = self.queue.get()
+            
+            try:
+                s3key.set_contents_from_string( msg )
+            except:
+                raise 
+
+
+    def __init__(self, *args, **kwargs):
+        self.queue = Queue()
+        self.threads = kwargs.pop( 'num_threads', 20 )
+        super( ThreadedS3Producer, self ).__init( *args, **kwargs )
+
+    def send(self, msg, **kwargs ):
+        #TODO -- The queue needs to be able to be fully populated by the sending routine.
+        for i in range( self.threads ):
+            t = ThreadedS3Writer( self.queue )
+            t.setDaemon( True )
+            t.start()
+
+        self.queue.put( (msg, kwargs) ) 
+
+        self.queue.join()
+
+
+
+    
 
 
 
