@@ -1,11 +1,15 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/22/2013
+" Last Updated: 01/24/2013
 "
 """
 import json
 from datetime import datetime, timedelta
+from functools import wraps
+
+import Queue
+import threading
 
 import pika
 import boto
@@ -69,6 +73,20 @@ class RabbitMQProducer( BaseProducer ):
         key = key.upper()
         self.channel.basic_publish( exchange=self.exchange, routing_key=key, body=msg )
 
+def async(func):
+    class FuncRunner(threading.Thread):
+        def __init__(self, args, kwargs):
+            super( FuncRunner, self ).__init__()
+            self.args = args
+            self.kwargs = kwargs
+
+            def run(self):
+                func(*(self.args), **(self.kwargs))
+
+    def newfunc( *args, **kwargs ):
+        FuncRunner( args, kwargs ).start()
+
+    return wraps(func)(newfunc)
 
 class S3Producer( BaseProducer ):
     """
@@ -89,7 +107,8 @@ class S3Producer( BaseProducer ):
         try:
             s3key_name = self._create_key_name( rkey )
             s3key = self.bucket.new_key( key_name=s3key_name )
-            s3key.set_contents_from_string( msg )
+            s3key.async_set_contents_from_string = async( s3key.__class__.set_contents_from_string )
+            s3key.async_set_contents_from_string( msg )
         except:
             raise 
 
@@ -107,6 +126,7 @@ class S3Producer( BaseProducer ):
         Generates a lifecycle policy on the s3 bucket.
         """
         pass
+
 
 
 class Producer( BaseProducer ):
