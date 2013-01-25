@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/22/2013
+" Last Updated: 01/24/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -121,5 +121,17 @@ def Consumer( routing_key ):
     """
     def decorator(func):
         s3consumer = S3Consumer( routing_key, func )
-        return s3consumer
+
+        #Attach the consumer to this callback function
+        func.consumer = s3consumer
+        return func
     return decorator
+
+#BETER decorator that supports both functions and methods!
+#class Consumer(object):
+#    def __init__(self, func):
+#        self.func = func
+#    def __get__(self, obj, type=None):
+#        return self.__class__(self.func.__get__(obj, type))
+#    def __call__(self, *args, **kw):
+#        return self.func(*args, **kw)
