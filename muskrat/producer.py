@@ -1,11 +1,12 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/22/2013
+" Last Updated: 01/28/2013
 "
 """
-import json
 from datetime import datetime, timedelta
+try: import simplejson as json
+except ImportError: import json
 
 import pika
 import boto
@@ -38,7 +39,9 @@ class BaseProducer(object):
         """
         Dumps the object to json before sending the message.
         """
-        self.send( json.dumps( obj ) )
+        
+        #Handle datetime objects
+        self.send( json.dumps( obj, default=lambda item: item.isoformat() if isinstance( item, datetime ) else None ) )
 
 
 class RabbitMQProducer( BaseProducer ):
