@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/25/2013
+" Last Updated: 01/28/2013
 "
 """
 import json
@@ -73,16 +73,6 @@ class RabbitMQProducer( BaseProducer ):
         key = key.upper()
         self.channel.basic_publish( exchange=self.exchange, routing_key=key, body=msg )
 
-def async_set_contents_from_string(anobj, msg ):
-    class FuncRunner(threading.Thread):
-        def __init__(self):
-            super( FuncRunner, self ).__init__()
-
-        def run(self):
-            anobj.set_contents_from_string( msg )
-
-    FuncRunner().start()
-
 
 class S3Producer( BaseProducer ):
     """
@@ -96,16 +86,22 @@ class S3Producer( BaseProducer ):
     
     def send( self, msg, **kwargs ):
         """
-        Sends the message with a producer and then attempt to write it to our s3 bucket.
+        Actually sends the message to our s3 bucket.
         """
         rkey = kwargs.get( 'routing_key', self.routing_key )
         rkey = rkey.upper()
         try:
             s3key_name = self._create_key_name( rkey )
             s3key = self.bucket.new_key( key_name=s3key_name )
-            async_set_contents_from_string( s3key, msg )
+            self._send( msg, s3key )
         except:
             raise 
+
+    def _send( self, msg, s3key):
+        """
+        Actually writes the message. Meant to be overridden for extensibility.
+        """
+        s3key.set_contents_from_string( msg )
 
     def _create_key_prefix( self, routing_key ):
         return routing_key.replace( '.', '/' )
@@ -122,43 +118,42 @@ class S3Producer( BaseProducer ):
         """
         pass
 
+class ThreadedS3Writer( threading.Thread ):
+    """
+    Actual thread that can write to S3.
+    """
+    def __init__(self, queue):
+        super(ThreadedS3Writer, self).__init__()
+        self.queue = queue
 
-class ThreadedS3Producer( S3Producer ):
-
-    class ThreadedS3Writer( threading.Thread ):
-        def __init__(self, queue):
-            super(ThreadedS3Writer, self).__init__()
-            self.queue = queue
-
-        def run(self):
+    def run(self):
+        while True:
             msg, s3key = self.queue.get()
-            
             try:
                 s3key.set_contents_from_string( msg )
             except:
                 raise 
+            self.queue.task_done()
 
+class ThreadedS3Producer( S3Producer ):
+    """
+    Creates a thread pool that allows for concurrent issuing of S3 requests.
+    This allows us to not have to block on network bound I/O.
 
+    Defaults to a thread pool of 20 threads.
+    """
     def __init__(self, *args, **kwargs):
-        self.queue = Queue()
+        self.queue = Queue.Queue()
         self.threads = kwargs.pop( 'num_threads', 20 )
-        super( ThreadedS3Producer, self ).__init( *args, **kwargs )
+        super( ThreadedS3Producer, self ).__init__( **kwargs )
 
-    def send(self, msg, **kwargs ):
-        #TODO -- The queue needs to be able to be fully populated by the sending routine.
         for i in range( self.threads ):
             t = ThreadedS3Writer( self.queue )
             t.setDaemon( True )
             t.start()
 
-        self.queue.put( (msg, kwargs) ) 
-
-        self.queue.join()
-
-
-
-    
-
+    def _send(self, msg, s3key):
+        self.queue.put( (msg, s3key) ) 
 
 
 class Producer( BaseProducer ):
