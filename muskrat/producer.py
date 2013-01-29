@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/28/2013
+" Last Updated: 01/29/2013
 "
 """
 import json
@@ -118,42 +118,64 @@ class S3Producer( BaseProducer ):
         """
         pass
 
+
 class ThreadedS3Writer( threading.Thread ):
     """
     Actual thread that can write to S3.
     """
-    def __init__(self, queue):
+    def __init__(self, queue, timeout=1):
         super(ThreadedS3Writer, self).__init__()
         self.queue = queue
+        self.timeout = timeout
 
     def run(self):
-        while True:
-            msg, s3key = self.queue.get()
-            try:
+        try:
+            #We want to continually process the queue if items are available
+            while True:
+                msg, s3key = self.queue.get( True, self.timeout )
                 s3key.set_contents_from_string( msg )
-            except:
-                raise 
-            self.queue.task_done()
+                self.queue.task_done()
+        except Queue.Empty:
+            #queue.get() timeout will cause this exception and mean we are done
+            #with our messages, so exit the thread.
+            pass
+
 
 class ThreadedS3Producer( S3Producer ):
     """
     Creates a thread pool that allows for concurrent issuing of S3 requests.
     This allows us to not have to block on network bound I/O.
+    This will create a pool that is limited to the number of threads defined.
+    Each thread has the potential to block for at least 1 second on cleanup.
 
     Defaults to a thread pool of 20 threads.
     """
     def __init__(self, *args, **kwargs):
         self.queue = Queue.Queue()
-        self.threads = kwargs.pop( 'num_threads', 20 )
+        self.num_threads = kwargs.pop( 'num_threads', 20 )
+        self.threads = []
         super( ThreadedS3Producer, self ).__init__( **kwargs )
 
-        for i in range( self.threads ):
+        for i in range( self.num_threads ):
             t = ThreadedS3Writer( self.queue )
-            t.setDaemon( True )
-            t.start()
+            self.threads.append( t )
+
+    def _start(self):
+        """
+        Starts the threads if they are not already running.
+        """
+        for t in self.threads:
+            if not t.isAlive():
+                t.start()
 
     def _send(self, msg, s3key):
         self.queue.put( (msg, s3key) ) 
+        self._start()
+
+    def join( self ):
+        """ Blocks until all messages have been processed/sent """
+        self.queue.join()
+
 
 
 class Producer( BaseProducer ):
