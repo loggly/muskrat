@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/24/2013
+" Last Updated: 01/29/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -97,8 +97,8 @@ class S3Consumer(object):
         """
         try:
             while True:
-                time.sleep( interval )
                 self.consume()
+                time.sleep( interval )
         except KeyboardInterrupt:
             pass
         except:
