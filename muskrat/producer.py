@@ -160,7 +160,12 @@ class ThreadedS3Producer( S3Producer ):
         """
         for t in self.threads:
             if not t.isAlive():
-                t.start()
+                try:
+                    t.start()
+                except RuntimeError:
+                    #Thread was already started and we are too quick for it's
+                    #isActive state change?  Just keep chugging along
+                    pass
 
     def _send(self, msg, s3key):
         self.queue.put( (msg, s3key) ) 
