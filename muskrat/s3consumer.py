@@ -75,15 +75,18 @@ class S3Consumer(object):
     def consume(self):
         #If marker is not matched to a key then the returned list is none.
         messages = self.bucket.get_all_keys( 
-                            prefix=self._gen_routing_key( self.topic ), 
+                            prefix=self._gen_routing_key( self.topic ) + '/', 
+                            delimiter= '/',
                             marker=self._cursor.get() 
                         )
         #TODO - LOOK INTO THIS.  If the bucket is created, but no keys exist... this
         #attempts to do something. We should probably explicitly check for this.
 
         for msg in messages:
-            self.callback( msg.get_contents_as_string() )
-            self._cursor.update( msg.name )
+            #Sub 'directories' are prefix objects, so ignore them
+            if isinstance( msg, boto.s3.key.Key ):
+                self.callback( msg.get_contents_as_string() )
+                self._cursor.update( msg.name )
 
 
     def consumption_loop( self, interval=2 ):
