@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/29/2013
+" Last Updated: 02/01/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -12,13 +12,7 @@ import os
 import time
 
 import boto
-
-from config import ENV
-if 'DEV' == ENV:
-    from config import DevConfig as CONFIG
-else:
-    from config import Config as CONFIG
-
+from config import CONFIG
 
 class S3Cursor(object):
     def __init__(self, name, atype='file'):
@@ -84,6 +78,8 @@ class S3Consumer(object):
                             prefix=self._gen_routing_key( self.topic ), 
                             marker=self._cursor.get() 
                         )
+        #TODO - LOOK INTO THIS.  If the bucket is created, but no keys exist... this
+        #attempts to do something. We should probably explicitly check for this.
 
         for msg in messages:
             self.callback( msg.get_contents_as_string() )

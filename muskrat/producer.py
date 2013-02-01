@@ -1,24 +1,18 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/29/2013
+" Last Updated: 02/01/2013
 "
 """
 import json
-from datetime import datetime, timedelta
-from functools import wraps
-
 import Queue
 import threading
+from   datetime   import datetime, timedelta
+from   functools  import wraps
 
 import pika
 import boto
-
-from config import ENV
-if 'DEV' == ENV:
-    from config import DevConfig as CONFIG
-else:
-    from config import Config as CONFIG
+from   config     import CONFIG
 
 class BaseProducer(object):
     """
