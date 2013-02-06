@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/01/2013
+" Last Updated: 02/06/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -72,16 +72,21 @@ class S3Consumer(object):
     def _gen_routing_key( self, topic ):
         return topic.replace( '.', '/' )
 
-    def consume(self):
+    def _get_msg_iterator(self):
         #If marker is not matched to a key then the returned list is none.
         msg_iterator = self.bucket.list( 
                             prefix=self._gen_routing_key( self.topic ) + '/', 
                             delimiter= '/',
                             marker=self._cursor.get() 
                         )
+
+        return msg_iterator
+
+    def consume(self):
         #TODO - LOOK INTO THIS.  If the bucket is created, but no keys exist... this
         #attempts to do something. We should probably explicitly check for this.
         #Update: actually... this doesn't seem to be a problem...
+        msg_iterator = self._get_msg_iterator()
 
         for msg in msg_iterator:
             #Sub 'directories' are prefix objects, so ignore them
@@ -104,8 +109,30 @@ class S3Consumer(object):
         except:
             raise
 
+
+class S3AggregateConsumer( S3Consumer ):
+    """
+    A consumer that does not consume messages in single msg order.  Rather,
+    this class retrieves all messages present when consume is called and issues 
+    the callback with a list of messages.
+    """
+
+    def consume( self ):
+        msg_iterator = self._get_msg_iterator()
+
+        cursor = None
+        messages = []
+        for msg in msg_iterator:
+            if isinstance( msg, boto.s3.key.Key ):
+                messages.append( msg.get_contents_as_string() )
+                cursor = msg.name
+
+        self.callback( messages )
+        self._cursor.update( cursor )
+
+
         
-def Consumer( routing_key ):
+def Consumer( routing_key, aggregate=False ):
     """
     Decorator function that will attach the decorated function to a RabbitMQ queue
     defined for the specified routing key.
@@ -120,12 +147,16 @@ def Consumer( routing_key ):
         The key defining the messages that the consumer will subscribe to.
     """
     def decorator(func):
-        s3consumer = S3Consumer( routing_key, func )
+        if not aggregate:
+            s3consumer = S3Consumer( routing_key, func )
+        else:
+            s3consumer = S3AggregateConsumer( routing_key, func )
 
         #Attach the consumer to this callback function
         func.consumer = s3consumer
         return func
     return decorator
+
 
 #BETER decorator that supports both functions and methods!
 #class Consumer(object):
