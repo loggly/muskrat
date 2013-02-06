@@ -40,7 +40,7 @@ class BaseProducer(object):
         """
         
         #Handle datetime objects
-        self.send( json.dumps( obj, default=lambda item: item.isoformat() if isinstance( item, datetime ) else None ) )
+        self.send( json.dumps( obj, default=lambda item: item.strftime(CONFIG.timeformat) if isinstance( item, datetime ) else None ) )
 
 
 class RabbitMQProducer( BaseProducer ):
