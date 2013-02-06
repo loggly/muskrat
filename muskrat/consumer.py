@@ -1,18 +1,18 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/22/2013
+" Last Updated: 02/01/2013
 "
 " This class defines a consumer singleton that can be used to provide the
 " underlying RabbitMQ connection interface for receiving messages.
 "
 """
-from collections import defaultdict
-from functools import wraps
 import exceptions
+from collections import defaultdict
+from functools   import wraps
 
 import pika
-from config import Config as CONFIG
+from config      import CONFIG
 
 
 class ConsumerNameError( Exception ):

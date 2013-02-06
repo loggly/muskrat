@@ -1,21 +1,20 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/28/2013
+" Last Updated: 02/06/2013
 "
 """
-from datetime import datetime, timedelta
 try: import simplejson as json
 except ImportError: import json
 
+import Queue
+import threading
+from   datetime   import datetime, timedelta
+from   functools  import wraps
+
 import pika
 import boto
-
-from config import ENV
-if 'DEV' == ENV:
-    from config import DevConfig as CONFIG
-else:
-    from config import Config as CONFIG
+from   config     import CONFIG
 
 class BaseProducer(object):
     """
@@ -85,16 +84,22 @@ class S3Producer( BaseProducer ):
     
     def send( self, msg, **kwargs ):
         """
-        Sends the message with a producer and then attempt to write it to our s3 bucket.
+        Actually sends the message to our s3 bucket.
         """
         rkey = kwargs.get( 'routing_key', self.routing_key )
         rkey = rkey.upper()
         try:
             s3key_name = self._create_key_name( rkey )
             s3key = self.bucket.new_key( key_name=s3key_name )
-            s3key.set_contents_from_string( msg )
+            self._send( msg, s3key )
         except:
             raise 
+
+    def _send( self, msg, s3key):
+        """
+        Actually writes the message. Meant to be overridden for extensibility.
+        """
+        s3key.set_contents_from_string( msg )
 
     def _create_key_prefix( self, routing_key ):
         return routing_key.replace( '.', '/' )
@@ -110,6 +115,70 @@ class S3Producer( BaseProducer ):
         Generates a lifecycle policy on the s3 bucket.
         """
         pass
+
+
+class ThreadedS3Writer( threading.Thread ):
+    """
+    Actual thread that can write to S3.
+    """
+    def __init__(self, queue, timeout=1):
+        super(ThreadedS3Writer, self).__init__()
+        self.queue = queue
+        self.timeout = timeout
+
+    def run(self):
+        try:
+            #We want to continually process the queue if items are available
+            while True:
+                msg, s3key = self.queue.get( True, self.timeout )
+                s3key.set_contents_from_string( msg )
+                self.queue.task_done()
+        except Queue.Empty:
+            #queue.get() timeout will cause this exception and mean we are done
+            #with our messages, so exit the thread.
+            pass
+
+
+class ThreadedS3Producer( S3Producer ):
+    """
+    Creates a thread pool that allows for concurrent issuing of S3 requests.
+    This allows us to not have to block on network bound I/O.
+    This will create a pool that is limited to the number of threads defined.
+    Each thread has the potential to block for at least 1 second on cleanup.
+
+    Defaults to a thread pool of 20 threads.
+    """
+    def __init__(self, *args, **kwargs):
+        self.queue = Queue.Queue()
+        self.num_threads = kwargs.pop( 'num_threads', 20 )
+        self.threads = []
+        super( ThreadedS3Producer, self ).__init__( **kwargs )
+
+        for i in range( self.num_threads ):
+            t = ThreadedS3Writer( self.queue )
+            self.threads.append( t )
+
+    def _start(self):
+        """
+        Starts the threads if they are not already running.
+        """
+        for t in self.threads:
+            if not t.isAlive():
+                try:
+                    t.start()
+                except RuntimeError:
+                    #Thread was already started and we are too quick for it's
+                    #isActive state change?  Just keep chugging along
+                    pass
+
+    def _send(self, msg, s3key):
+        self.queue.put( (msg, s3key) ) 
+        self._start()
+
+    def join( self ):
+        """ Blocks until all messages have been processed/sent """
+        self.queue.join()
+
 
 
 class Producer( BaseProducer ):

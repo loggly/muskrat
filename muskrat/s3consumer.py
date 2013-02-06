@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/24/2013
+" Last Updated: 02/01/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -12,13 +12,7 @@ import os
 import time
 
 import boto
-
-from config import ENV
-if 'DEV' == ENV:
-    from config import DevConfig as CONFIG
-else:
-    from config import Config as CONFIG
-
+from config import CONFIG
 
 class S3Cursor(object):
     def __init__(self, name, atype='file'):
@@ -80,14 +74,20 @@ class S3Consumer(object):
 
     def consume(self):
         #If marker is not matched to a key then the returned list is none.
-        messages = self.bucket.get_all_keys( 
-                            prefix=self._gen_routing_key( self.topic ), 
+        msg_iterator = self.bucket.list( 
+                            prefix=self._gen_routing_key( self.topic ) + '/', 
+                            delimiter= '/',
                             marker=self._cursor.get() 
                         )
+        #TODO - LOOK INTO THIS.  If the bucket is created, but no keys exist... this
+        #attempts to do something. We should probably explicitly check for this.
+        #Update: actually... this doesn't seem to be a problem...
 
-        for msg in messages:
-            self.callback( msg.get_contents_as_string() )
-            self._cursor.update( msg.name )
+        for msg in msg_iterator:
+            #Sub 'directories' are prefix objects, so ignore them
+            if isinstance( msg, boto.s3.key.Key ):
+                self.callback( msg.get_contents_as_string() )
+                self._cursor.update( msg.name )
 
 
     def consumption_loop( self, interval=2 ):
@@ -97,8 +97,8 @@ class S3Consumer(object):
         """
         try:
             while True:
-                time.sleep( interval )
                 self.consume()
+                time.sleep( interval )
         except KeyboardInterrupt:
             pass
         except:
