@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/06/2013
+" Last Updated: 02/08/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 topic.  This class also handles tracking
@@ -127,8 +127,9 @@ class S3AggregateConsumer( S3Consumer ):
                 messages.append( msg.get_contents_as_string() )
                 cursor = msg.name
 
-        self.callback( messages )
-        self._cursor.update( cursor )
+        if messages:
+            self.callback( messages )
+            self._cursor.update( cursor )
 
 
         
