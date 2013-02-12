@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/06/2013
+" Last Updated: 02/12/2013
 "
 """
 try: import simplejson as json
@@ -117,12 +117,12 @@ class S3Producer( BaseProducer ):
         pass
 
 
-class ThreadedS3Writer( threading.Thread ):
+class S3WriteThread( threading.Thread ):
     """
     Actual thread that can write to S3.
     """
     def __init__(self, queue, timeout=1):
-        super(ThreadedS3Writer, self).__init__()
+        super(S3WriteThread, self).__init__()
         self.queue = queue
         self.timeout = timeout
 
@@ -154,24 +154,36 @@ class ThreadedS3Producer( S3Producer ):
         self.threads = []
         super( ThreadedS3Producer, self ).__init__( **kwargs )
 
-        for i in range( self.num_threads ):
-            t = ThreadedS3Writer( self.queue )
-            self.threads.append( t )
 
     def _start(self):
         """
         Starts the threads if they are not already running.
         """
-        for t in self.threads:
-            if not t.isAlive():
-                try:
-                    t.start()
-                except RuntimeError:
-                    #Thread was already started and we are too quick for it's
-                    #isActive state change?  Just keep chugging along
-                    pass
+        if not self.threads:
+            for i in range( self.num_threads ):
+                t = S3WriteThread( self.queue )
+                self.threads.append( t )
+                t.start()
+        else:
+            for i, t in enumerate( self.threads ):
+                if not t.isAlive():
+                    try:
+                        #Threads can only be started once.  In the case that
+                        #our thread *appears* to have finished before all of
+                        #our data is proccessed (Queue was temporarily empty)
+                        #Lets replace that thread with a new one and keep
+                        #keep proccessing
+                        replacement_thread = S3WriteThread( self.queue )
+                        self.threads[ i ] = replacement_thread
+                        replacement_thread.start()
+                    except RuntimeError:
+                        #Nothing we can do here.. keep chugging along with
+                        #the threads that exist
+                        pass
 
     def _send(self, msg, s3key):
+        #Our _start should guarantee that this is always atleast
+        #one thread in our pool that is active and ready to procces
         self.queue.put( (msg, s3key) ) 
         self._start()
 
