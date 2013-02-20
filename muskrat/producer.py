@@ -217,22 +217,21 @@ class ThreadedS3Producer( S3Producer ):
 
 
 class Producer( BaseProducer ):
-    def __init__( self, s3=True, rabbitmq=False, **kwargs ):
+    def __init__( self, brokers=None, **kwargs ):
         """
         Creates a generic producer that can use multiple interfaces for sending messages
         """
+        if not brokers:
+            brokers = [S3Producer]
+
         self.brokers = []
         super( Producer, self ).__init__( **kwargs )
+        
+        if 'config' in kwargs:
+            kwargs.pop( 'config' )
 
-        if s3:
-            self.brokers.append( S3Producer( **kwargs ) )
-        elif rabbitmq:
-            self.brokers.append( RabbitMQProducer( **kwargs ) )
-        else:
-            raise Exception( 'No defined middleman for the producer! Please select: s3 or rabbitmq' )
-
-    def set_routing_key():
-        pass
+        for broker in brokers:
+            self.brokers.append( broker( **kwargs ) )
 
     def send( self, msg, **kwargs):
         """
