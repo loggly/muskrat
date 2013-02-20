@@ -15,13 +15,12 @@ from   datetime   import datetime
 
 import pika
 import boto
-from   config     import CONFIG
 
 class BaseProducer(object):
     """
     Producer object that is meant to ease the sending of messages
     """
-    def __init__( self, **kwargs ):
+    def __init__( self, config='config.py', **kwargs ):
         """
         Create the producer.  General practive is to have a single routing_key for this producer,
         channel, connection.  This is for simplicity.  Multiple producers can be defined for the same
@@ -29,7 +28,28 @@ class BaseProducer(object):
         
         routing_key
             key for the data source to bind this producer to. Defaults to the config file.
+        config
+            Configuration file if not defined in muskrat.config.py.
         """
+        if not 'CONFIG' in globals():
+            #Non-path filenames need to be resolved to point to the same directory as this file
+            #as per our default config loading structure
+            if os.path.basename( config ) == config:
+                config = os.path.join( os.path.dirname( __file__ ), config )
+
+            #Load config as a new module and place in this module's global scope
+            d = imp.new_module('config')
+            d.__file__ = config
+
+            try:
+                execfile(config, d.__dict__)
+            except IOError, e:
+                e.strerror = 'Unable to load configuration file (%s)' % e.strerror
+                raise
+            
+            #Make CONFIG known to this module
+            globals()['CONFIG'] = d.CONFIG
+
         self.routing_key = kwargs.get( 'routing_key' )
         if self.routing_key:
             self.routing_key = self.routing_key.upper()
