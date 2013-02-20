@@ -54,12 +54,13 @@ class BaseProducer(object):
         if self.routing_key:
             self.routing_key = self.routing_key.upper()
 
+    def send( self, msg ):
+        """ Class interface method.  Needs to be implemented by children """
+        raise NotImplementedError
 
     def send_json( self, obj ):
-        """
-        Dumps the object to json before sending the message.
-        """
-        
+        """ Dumps the object to json before sending the message.  """
+
         #Handle datetime objects
         self.send( json.dumps( obj, default=lambda item: item.strftime(CONFIG.timeformat) if isinstance( item, datetime ) else None ) )
 
@@ -77,6 +78,7 @@ class RabbitMQProducer( BaseProducer ):
         exchange
             name of the exchange to send messages to. Defaults to the config file.
         """
+        super( RabbitMQProducer, self ).__init__(**kwargs)
         self.parameters = pika.ConnectionParameters( host=CONFIG.host )
         self.conn = pika.BlockingConnection( self.parameters )
         self.channel = self.conn.channel()
@@ -135,7 +137,7 @@ class S3Producer( BaseProducer ):
         """
         Generates a lifecycle policy on the s3 bucket.
         """
-        pass
+        raise NotImplementedError
 
 
 class S3WriteThread( threading.Thread ):
