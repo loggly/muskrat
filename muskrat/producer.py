@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/12/2013
+" Last Updated: 02/20/2013
 "
 """
 try: import simplejson as json
@@ -218,6 +218,3 @@ class Producer( BaseProducer ):
         for broker in self.brokers:
             broker.send( msg, **kwargs )
 
-
-# For Retreival use bucket.get_key( prefix='First/Second/Third' )
-# Then filter items by splitting on the last '/' and date
