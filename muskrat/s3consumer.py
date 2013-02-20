@@ -1,10 +1,10 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/08/2013
+" Last Updated: 02/20/2013
 "
 " This class provides the ability to register a function as 
-" a consumer to an S3 topic.  This class also handles tracking
+" a consumer to an S3 routing_key.  This class also handles tracking
 " that consumer's state.
 "
 """
@@ -15,10 +15,10 @@ import boto
 from config import CONFIG
 
 class S3Cursor(object):
-    def __init__(self, name, atype='file'):
+    def __init__(self, name, type='file'):
         self.name = name
         self.current = None
-        self.type = atype
+        self.type = type
 
         if self.type == 'file':
             self.filename = os.path.join( CONFIG.s3_cursor['location'], name )
@@ -54,12 +54,12 @@ class S3Cursor(object):
 
 class S3Consumer(object):
 
-    def __init__(self, topic, func, name=None):
+    def __init__(self, routing_key, func, name=None):
         self.s3conn = boto.connect_s3( CONFIG.s3_key, CONFIG.s3_secret )
         self.bucket = self.s3conn.get_bucket( CONFIG.s3_bucket )
-        self.topic = topic.upper()
+        self.routing_key = routing_key.upper()
         self.callback = func
-        self._cursor = S3Cursor( self._gen_name( func ), atype=CONFIG.s3_cursor['type'] )
+        self._cursor = S3Cursor( self._gen_name( func ), type=CONFIG.s3_cursor['type'] )
 
         if not name:
             self.name = self._gen_name( self.callback )
@@ -69,13 +69,13 @@ class S3Consumer(object):
     def _gen_name(self, func):
         return func.__module__ + '.' + func.__name__
 
-    def _gen_routing_key( self, topic ):
-        return topic.replace( '.', '/' )
+    def _gen_routing_key( self, routing_key ):
+        return routing_key.replace( '.', '/' )
 
     def _get_msg_iterator(self):
         #If marker is not matched to a key then the returned list is none.
         msg_iterator = self.bucket.list( 
-                            prefix=self._gen_routing_key( self.topic ) + '/', 
+                            prefix=self._gen_routing_key( self.routing_key ) + '/', 
                             delimiter= '/',
                             marker=self._cursor.get() 
                         )
