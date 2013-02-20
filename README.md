@@ -1,70 +1,33 @@
 Muskrat
 ======
 
-The small brother of the beaver, muskrat is a system that allows us to sync user information from many datasources (Frontend, Salesforce, Brantree, Statsserver, etc..) to many endpoints (Analytics Database, Marketo, Salesforce, etc... )
+A python producer/consumer library that provides a persistent multicasting message queue with a simple interface. Originally built ontop of S3 for persistent message queueing that does not require the setup of a broker tool.  Also, has experimental support of multiple brokers.
 
-##Problem
+Currently supports the following brokers: 
 
-Customer data is collected, aggregated, stored, not-stored from numerous different sources within our overall platform.  This creates a discontinuity when attempting to access those data for specific analytics tasks.  The current state of the system is an amalgamation of heavy cronned data-grabbing scripts, Frontend dependent triggers and subsequent data pushes.  This method will not scale well with growth of the customerbase (greedy data-grabs) or added complexity of sourcing more data and requiring more destinations. Along with this, the points of failure for any one script are numerous and can cause an entire segment of a sync to be lost indefinitely.
+    s3
+    RabbitMQ
 
-Likewise, one of the major drives of Muskrat comes from the understanding that the system currently operates with a 1-to-1 mapping of source data to destination.  Realistically, this needs to be a 1-to-N mapping in order to support all of our needs with the system and perform different routines on the source data (example: user account volume usage needs to be propogated to the analyticsdb and salesforce with different endpoint mutations/operations). 
-
-##Solution
-
-Create a modular sync system that separates the concerns of the datasourcing routines from that of the data-destination routines.  This should minimize the effect of failure points along with providing a more easily managed system that can debugged/grown.  This is accomplised by implementing a Producer-Consumer pattern utilizing RabbitMQ as the broker.
-
-###RabbitMQ
-RabbitMQ was chosen as the center point of the system to allow 3 main items:
-
-1. Separation of concerns
-2. PUB/SUB
-3. Reliability/Persistance
-
-In the Producer-Consumer paradigm, it acts as the Broker between the two.  It manages the means for the messages to be routed from the producers to the consumers.
-
-#####Separation of concerns
-
-Producers (tiggers, customer db scrapes, statsserver queries, etc... ) only need to do their single task and put the output out on the lline before they fall dormant until being woken up again based on their desired timing.
-
-Consumers (AnalyticsDB injector, Marketo injector, salesforce injector, etc... ) are long running processes that lay in wait for their subscribed data source messages to arrive.  Syncronization timing is not an issue for these routines as they consume as much as they can receive as fast as possible. Likewise, if these consumers routines die unexpectedly, the producer messages are not affected nor are other consumers that rely on the same message.
-
-#####PUB/SUB
-
-Consumers define the data source locations that they wish to subscribe to.  This means that multiple consumers or data endpoints can be monitoring data messages from a single source concurrently.  Working in this way is a multicast or PUB/SUB pattern.  An example of usage can be seen in data volume collecting.  At the current time, both salesforce and the analyticsdb need access to the customer data volumes.  Allowing both these consumers to subscribe to the single data source message allows them to fulfill their roles concurrently without adding duplication to the source routine or complexity in the data marshalling routine.
-
-#####Reliability/Persistance
-
-RabbitMQ allows persistance of the queue.  For time-specific snapshots of user usage this is an essential reliability component.  If the data is written by the consumer then it will be present for the consumer.  Even if the consumer process were to die un-expectedly, the queue would buffer all messages being sent to various subscribers.
-
-####
+Muskrat also allows Producers to 'tee' messages to multiple brokers.  As an example, a message can be tee'd to write to both RabbitMQ for high-throughput and s3 for message persistence/replay.
 
 ###Message Structure
 
-The Following is a general best practice for message structure.  It is meants as a guide to help keep the system consistent.
-
 ####Routing Keys
 
-Routing Keys are published with messages by the producer and subscribed to by the consumers.  They allow the broker enough information to discern how it should 'route' messages to specific consumers.
-
-Because we want the producer to be as 'dumb' as possbile, we will make our messages routing keys defined by their data source location.  For example, if we were to collect Customer signup data via a trigger in the frontend database, we would give the message the routing key:
-
-    Frontend.Customer.Signup
+Routing keys allow the producer to specify where the message is to be stored in the broker.  These routing_keys can then be subscribed to by multiple consumers and messages can be proccessed independently by the consumer endpoints.
 
 Routing keys should fall under the following patterns:
 
-    Routing Key Guideline: <Source Location>.<Object>.<Source Action>
+    Example routing keys:
 
-Doing this allows us to setup our consumers to listen for messages with various levels of granularity. For example,  
-
-    Frontend.*
-    Frontend.Customer.*
-    Frontend.Customer.Signup
-    
-consumer Routing keys will all subscribe to this specific message. For more information on the versatility of routine key wildcards go here: [RabbitMQ Topics Pattern](http://www.rabbitmq.com/tutorials/tutorial-five-python.html).
+    ```Frontend.Customer.Signup 
+    Chatserver.General
+    Job.Queue.Command
+    ```
 
 ####Message Bodies
 
-Message bodies are transmitted as strings in a general structure that should be easily decoded by the consumer.  For this it is suggested that JSON is used.  The exact format of the message is left up to whomever is implementing the producer and consumer.  It is suggest that messages be tight and to the point, encompassing on the data that is most relevant as opposed to containing an entire, heavyweight object definition.
+Message bodies are transmitted as strings in a general structure that should be easily decoded by the consumer.  For this it is suggested that JSON is used.  The exact format of the message is left up to whomever is implementing the producer and consumer.
 
     Routing Key 
 
@@ -72,7 +35,7 @@ Message bodies are transmitted as strings in a general structure that should be 
 
     Message
 
-        '{
+        ```json'{
             "id":48239,
             "email":"test@loggly.com",
             "phone":"(555)555-5555",
@@ -85,3 +48,102 @@ Message bodies are transmitted as strings in a general structure that should be 
                 "rate":"0.0"
             }
         }'
+        ```
+
+###Producers
+
+Producers write messages to brokers to be distributed.
+
+####S3 Producers
+
+S3Producer: Simple blocking S3 producer. Writes a message to S3.
+
+Example:
+
+```python
+p = S3Producer( routing_key = 'Frontend.Customer.Signup' )
+p.send( 'I am producing a message to s3!' )
+p.send_json( {'email':'test@loggly.co', 'company':'loggly' } )
+```
+
+ThreadedS3Producer: An asynchronous interface to S3.  Allows the creation of a spcified thread pool to multiple asynchronous HTTP write requests to S3.  Used to speedup multiple contiguous writes as the producer will not block on the outbound network IO.
+
+Example:
+
+```python
+p = ThreadedS3Producer( routing_key = 'ThreadTest.Messages', num_threads=100  )
+for x in range( 1000 ):
+    p.send_json( {'message':x} )
+```
+
+
+####RabbitMQ Producers
+
+Experimental.  Utilizes RabbitMQ as a message queueing/brorker service.  Does not guarantee indefinite message persistence or lifecycle polcies.
+
+####General Producers
+
+General Producers can write to multiple brokers at one time.  A producer default to only use S3Producer if no other Producer objects are supplied.
+
+```python
+from muskrat.producer import Producer
+p = Producer( routing_key='Chatserver.General' )
+p.send( 'Welcome to General Chat!' )
+ ```
+
+__Currently__ RabbitMQ support is experimental.
+
+###Consumers
+
+Consumers receive messages from the brokers in chronological order and do work with them.  The consumer must be instantiated for the corresponding message broker, ala:
+
+```python
+p = Producer( routing_key='Simple.Producer' )
+p.send( 'This is a simple producer-consumer pair' )
+
+.
+.
+.
+
+from muskrat.s3consumer import Consumer
+
+@Consumer( 'Simple.Message.Queue' )
+def consume_messages( msg ):
+    print msg
+
+consume_message.consumer.consume()
+```
+
+Consumers are just functions that know what to do with the messages for a routing key.  The above example will consume as many messages are on the queue when consume call was issued.
+
+The ```@Consumer``` decorator is a convenience that allows the consumer object to be bound to the function's dictionary.  We can still call the function directly if desired.  Using the decorator is equivalent to: 
+
+```python
+from muskrat.s3consumer import S3Consumer
+
+s3consumer = S3Consumer( 'Simple.Message.Queue', consume_messages )
+s3consumer.consume()
+```
+
+#####Cursor
+
+S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by 'consumer_function.__module__'.'consumer_function.__name__' in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
+
+###Config
+
+Configuration settings are defined in a python file.  They must define the local variable CONFIG.
+
+```python
+import os
+
+class CONFIG(object):
+    s3_timestamp_format = '%Y-%m-%dT%H:%M:%S.%f'
+    s3_key              = 'YOUR S3 KEY'
+    s3_secret           = 'YOUR S3 SECRET'
+    s3_bucket           = 'chatserver'
+    s3_cursor           = {
+                            'type':'file',
+                            'location':os.path.join( os.path.dirname(__file__), 'cursors' )
+                        } 
+
+    timeformat          = '%Y-%m-%dT%H:%M:%S'
