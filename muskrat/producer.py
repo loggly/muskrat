@@ -7,10 +7,11 @@
 try: import simplejson as json
 except ImportError: import json
 
+import imp
+import os
 import Queue
 import threading
-from   datetime   import datetime, timedelta
-from   functools  import wraps
+from   datetime   import datetime
 
 import pika
 import boto
