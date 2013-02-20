@@ -98,7 +98,7 @@ __Currently__ RabbitMQ support is experimental.
 Consumers receive messages from the brokers in chronological order and do work with them.  The consumer must be instantiated for the corresponding message broker, ala:
 
 ```python
-p = Producer( routing_key='Simple.Producer' )
+p = Producer( routing_key='Simple.Message.Queue' )
 p.send( 'This is a simple producer-consumer pair' )
 
 .
@@ -147,3 +147,6 @@ class CONFIG(object):
                         } 
 
     timeformat          = '%Y-%m-%dT%H:%M:%S'
+```
+
+To set a configuration file send it via the constructor.  By default, 'config.py' of muskrat directory is used (muskrat.config in python package terms).
