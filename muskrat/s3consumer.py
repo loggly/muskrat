@@ -12,18 +12,35 @@ import os
 import time
 
 import boto
-from config import CONFIG
+from   muskrat.util import config_loader
 
 class S3Cursor(object):
-    def __init__(self, name, type='file'):
+    def __init__(self, name, type, **kwargs ):
+        """
+        Creates a cursor object to track messages consumed. Defaults to a file based cursor
+        existing in a cursors directory at the same path 
+        
+        name
+            name of the cursor
+        config
+            a dictionary containing cursor type and type specific config items.
+
+            example: {'type':'file', 'location': os.path.dirname( __file__ ) }
+        """
         self.name = name
         self.current = None
         self.type = type
-
+        
+        #TODO - handle multiple cursor types such as row injection into a DB.
         if self.type == 'file':
-            self.filename = os.path.join( CONFIG.s3_cursor['location'], name )
+            #Default to the same directory as this file
+            path = kwargs.get( 'location', os.path.dirname( __file__ ) )
+            self.filename = os.path.join( path, name )
             self._update_func = self._update_file_cursor
             self._get_func = self._get_file_cursor
+        else:
+            raise NotImplementedError('File cursor types currently the only types supported')
+
 
     def _update_file_cursor( self, key ):
         #instead of opening and re-opening we could just seek and truncate
@@ -54,19 +71,28 @@ class S3Cursor(object):
 
 class S3Consumer(object):
 
-    def __init__(self, routing_key, func, name=None):
-        self.s3conn = boto.connect_s3( CONFIG.s3_key, CONFIG.s3_secret )
-        self.bucket = self.s3conn.get_bucket( CONFIG.s3_bucket )
+    def __init__(self, routing_key, func, name=None, config='config.py'):
+
+        self.config = config_loader( config )
+        self.s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
+        self.bucket = self.s3conn.get_bucket( self.config.s3_bucket )
         self.routing_key = routing_key.upper()
         self.callback = func
-        self._cursor = S3Cursor( self._gen_name( func ), type=CONFIG.s3_cursor['type'] )
 
         if not name:
             self.name = self._gen_name( self.callback )
         else:
             self.name = name
+
+        self._cursor = S3Cursor( 
+                           self.name, 
+                           type=self.config.s3_cursor['type'],
+                           location=self.config.s3_cursor['location']
+                       )
+                                 
     
     def _gen_name(self, func):
+        """ Generates a cursor name so that the cursor can be re-attached to """
         return func.__module__ + '.' + func.__name__
 
     def _gen_routing_key( self, routing_key ):
@@ -83,7 +109,7 @@ class S3Consumer(object):
         return msg_iterator
 
     def consume(self):
-        #TODO - LOOK INTO THIS.  If the bucket is created, but no keys exist... this
+        #TODO - If the bucket is created, but no keys exist... this
         #attempts to do something. We should probably explicitly check for this.
         #Update: actually... this doesn't seem to be a problem...
         msg_iterator = self._get_msg_iterator()
@@ -133,7 +159,7 @@ class S3AggregateConsumer( S3Consumer ):
 
 
         
-def Consumer( routing_key, aggregate=False ):
+def Consumer( routing_key, aggregate=False, **kwargs):
     """
     Decorator function that will attach the decorated function to a RabbitMQ queue
     defined for the specified routing key.
@@ -149,9 +175,9 @@ def Consumer( routing_key, aggregate=False ):
     """
     def decorator(func):
         if not aggregate:
-            s3consumer = S3Consumer( routing_key, func )
+            s3consumer = S3Consumer( routing_key, func, **kwargs )
         else:
-            s3consumer = S3AggregateConsumer( routing_key, func )
+            s3consumer = S3AggregateConsumer( routing_key, func, **kwargs )
 
         #Attach the consumer to this callback function
         func.consumer = s3consumer
