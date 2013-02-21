@@ -7,14 +7,13 @@
 try: import simplejson as json
 except ImportError: import json
 
-import imp
-import os
 import Queue
 import threading
 from   datetime   import datetime
 
 import pika
 import boto
+from   muskrat.util import config_loader
 
 class BaseProducer(object):
     """
@@ -31,24 +30,7 @@ class BaseProducer(object):
         config
             Configuration file if not defined in muskrat.config.py.
         """
-        if not 'CONFIG' in globals():
-            #Non-path filenames need to be resolved to point to the same directory as this file
-            #as per our default config loading structure
-            if os.path.basename( config ) == config:
-                config = os.path.join( os.path.dirname( __file__ ), config )
-
-            #Load config as a new module and place in this module's global scope
-            d = imp.new_module('config')
-            d.__file__ = config
-
-            try:
-                execfile(config, d.__dict__)
-            except IOError, e:
-                e.strerror = 'Unable to load configuration file (%s)' % e.strerror
-                raise
-            
-            #Make CONFIG known to this module
-            globals()['CONFIG'] = d.CONFIG
+        self.config = config_loader( config )
 
         self.routing_key = kwargs.get( 'routing_key' )
         if self.routing_key:
@@ -62,7 +44,7 @@ class BaseProducer(object):
         """ Dumps the object to json before sending the message.  """
 
         #Handle datetime objects
-        self.send( json.dumps( obj, default=lambda item: item.strftime(CONFIG.timeformat) if isinstance( item, datetime ) else None ) )
+        self.send( json.dumps( obj, default=lambda item: item.strftime(self.config.timeformat) if isinstance( item, datetime ) else None ) )
 
 
 class RabbitMQProducer( BaseProducer ):
@@ -78,12 +60,11 @@ class RabbitMQProducer( BaseProducer ):
         exchange
             name of the exchange to send messages to. Defaults to the config file.
         """
-        super( RabbitMQProducer, self ).__init__(**kwargs)
-        self.parameters = pika.ConnectionParameters( host=CONFIG.host )
+        self.parameters = pika.ConnectionParameters( host=self.config.host )
         self.conn = pika.BlockingConnection( self.parameters )
         self.channel = self.conn.channel()
 
-        self.exchange = kwargs.get( 'exchange', CONFIG.exchange_name )
+        self.exchange = kwargs.get( 'exchange', self.config.exchange_name )
         super( RabbitMQProducer, self ).__init__( **kwargs )
     
     def send( self, msg, **kwargs ):
@@ -102,8 +83,8 @@ class S3Producer( BaseProducer ):
 
     def __init__(self, **kwargs):
         super( S3Producer, self ).__init__(**kwargs)
-        self.s3conn = boto.connect_s3( CONFIG.s3_key, CONFIG.s3_secret )
-        self.bucket = self.s3conn.get_bucket( CONFIG.s3_bucket )
+        self.s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
+        self.bucket = self.s3conn.get_bucket( self.config.s3_bucket )
     
     def send( self, msg, **kwargs ):
         """
@@ -131,7 +112,7 @@ class S3Producer( BaseProducer ):
         """
         Creates a key based on the routing key and a timestamp of the actual item.
         """
-        return '/'.join( [self._create_key_prefix( routing_key ), datetime.today().strftime( CONFIG.s3_timestamp_format )] )
+        return '/'.join( [self._create_key_prefix( routing_key ), datetime.today().strftime( self.config.s3_timestamp_format )] )
 
     def _set_lifecycle_policy( self, policy ):
         """
@@ -220,15 +201,18 @@ class Producer( BaseProducer ):
     def __init__( self, brokers=None, **kwargs ):
         """
         Creates a generic producer that can use multiple interfaces for sending messages
+
+        brokers
+            a list of Producer classes to create a broker for.  All supplied keyword 
+            arguments are forwarded to the __init__ method of the class upon instantiation.
         """
+        super(Producer, self).__init__(**kwargs)
+
+        #Default to S3
         if not brokers:
             brokers = [S3Producer]
 
         self.brokers = []
-        super( Producer, self ).__init__( **kwargs )
-        
-        if 'config' in kwargs:
-            kwargs.pop( 'config' )
 
         for broker in brokers:
             self.brokers.append( broker( **kwargs ) )
