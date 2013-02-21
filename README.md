@@ -64,7 +64,10 @@ from muskrat.producer import S3Producer
 
 p = S3Producer( routing_key = 'Frontend.Customer.Signup' )
 p.send( 'I am producing a message to s3!' )
-p.send_json( {'email':'test@loggly.co', 'company':'loggly' } )
+p.send_json({
+    'email':'test@loggly.com',
+    'company':'loggly' 
+})
 ```
 
 #####ThreadedS3Producer
@@ -78,7 +81,7 @@ from muskrat.producer import ThreadedS3Producer
 
 p = ThreadedS3Producer( routing_key = 'ThreadTest.Messages', num_threads=100  )
 for x in range( 1000 ):
-    p.send_json( {'message':x} )
+    p.send_json( { 'message':x } )
 ```
 
 
@@ -134,7 +137,7 @@ s3consumer.consume()
 
 #####Cursor
 
-S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by *consumer_function.__module__*.*consumer_function.__name__* in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
+S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by ```__module__.consumer_function.__name__``` in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
 
 ###Config
 
@@ -144,16 +147,16 @@ Configuration settings are defined in a python file.  They must define the modul
 import os
 
 class Config(object):
-    s3_timestamp_format = '%Y-%m-%dT%H:%M:%S.%f'
+    s3_timestamp_format = '%Y-%m-%dT%H:%M:%S.%f' #Timestamp format of cursor terminal file name.  See datetime.strftime for details.
     s3_key              = 'YOUR S3 KEY'
     s3_secret           = 'YOUR S3 SECRET'
-    s3_bucket           = 'chatserver'
+    s3_bucket           = 'chatserver'           #S3 Bucket to produce messages to
     s3_cursor           = {
                             'type':'file',
-                            'location':os.path.join( os.path.dirname(__file__), 'cursors' )
+                            'location':os.path.join( os.path.dirname(__file__), 'cursors' ) #Directory to store cursor files under
                         } 
 
-    timeformat          = '%Y-%m-%dT%H:%M:%S'
+    timeformat          = '%Y-%m-%dT%H:%M:%S'    #Timeformat for datetime objects in JSON messages
 
 class DevConfig(object):
     s3_bucket           = 'chatserver_dev'
@@ -164,6 +167,8 @@ CONFIG = Config
 If a configuration file external to a muskrat package is desired, the config parameter can be set to the full path of the external config.
 
 ```python
+#Where /home/hoover/muskrat_config.py is our external config file.
+
 p = Producer( routing_key= 'Simple.Message.Queue', config='/home/hoover/muskrat_config.py' )
 
 c = S3Consumer( 'Simple.Message.Queue', config='/home/hoover/muskrat_config.py' )
@@ -171,7 +176,6 @@ c = S3Consumer( 'Simple.Message.Queue', config='/home/hoover/muskrat_config.py' 
 @Consumer( 'Simple.Message.Queue', config='/home/hoover/muskrat_config.py' )
 def simple_consume( msg ):
     print msg
-
 ```
 
 ###TODO
