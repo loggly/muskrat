@@ -59,9 +59,12 @@ class TestS3Consumer( TestS3ConsumerBase ):
 
         self.assertIsNotNone( c._cursor, 'Cursor failed to create' )
         self.assertEqual( c._cursor.type, 'file',  'Cursor default type is not file' )
-        self.assertEqual( c._cursor.filename, 
-                          os.path.join( self.config.s3_cursor['location'], '__main__.consumer_func' ),
-                          'Cursor file not created as expected' )
+        self.assertEqual( os.path.dirname( c._cursor.filename ), 
+                          os.path.join( self.config.s3_cursor['location'] ),
+                          'Cursor directory not created as expected' )
+        self.assertEqual( os.path.basename( c._cursor.filename ), 
+                          '__main__.testconsumer',
+                          'Cursor file name not created as expected' )
 
 
     def test_bad_config( self ):
