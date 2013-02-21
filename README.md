@@ -137,7 +137,9 @@ s3consumer.consume()
 
 #####Cursor
 
-S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by ```__module__.consumer_function.__name__``` in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
+S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by ```__module__.consumer_function_name``` in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
+
+For the function, ```consume_messages``` run via the ```__main__``` module the cursor would be stored in ```<path to muskrat install>/muskrat/cursors/__main__.consume_messages```.  The file would contain one line consisting of the current state of the consumer as it is proccessing messages.  If the ```consume_message``` is subscribed to the routing key ```Chatserver.General``` then the cursor file contents would be something akin to ```CHATSERVER/GENERAL/2013-01-18T12:23:13.894895```
 
 ###Config
 
