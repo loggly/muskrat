@@ -1,7 +1,7 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/20/2013
+" Last Updated: 02/21/2013
 "
 " Common routines for muskrat.
 "
@@ -9,30 +9,42 @@
 import imp
 import os
 
-def config_loader( filename ):
+def config_loader( config ):
     """
-    Loads the configuration from an external python file.  In order for the configuration to
-    be loaded successfully the file needs to define a module leve variable 'CONFIG' that
-    points to the configuration class.
+    Loads the configuration from an either and external python file, python object, or dict.
 
-    filename
-        The name of the python configuration file.  If a terminal filename is given, such as
-        'dev_config.py' then the default behavior is to look in the folder where this file
-        exists for a match.
+    config
+        A config of 3 possible types; python filepath, python object, or dict
+        If the config parameter is a python file and is not an absolute path then the
+        the load is attempted from this file's directory.
     """
     #Non-path filenames need to be resolved to point to the same directory as this file
     #as per our default config loading structure
-    if os.path.basename( filename ) == filename:
-        config = os.path.join( os.path.dirname( __file__ ), filename )
 
-    #Load config as a new module and place in this module's global scope
-    d = imp.new_module('config')
-    d.__file__ = config
+    if isinstance( config, str ) and config.endswith( '.py' ):
+        if os.path.basename( config ) == config:
+            config = os.path.join( os.path.dirname( __file__ ), config )
 
-    try:
-        execfile(config, d.__dict__)
-    except IOError, e:
-        e.strerror = 'Unable to load configuration file (%s)' % e.strerror
-        raise
+        #Load config as a new module and place in this module's global scope
+        d = imp.new_module('config')
+        d.__file__ = config
+
+        try:
+            execfile(config, d.__dict__)
+        except IOError, e:
+            e.strerror = 'Unable to load configuration file (%s)' % e.strerror
+            raise
+        
+        return d.CONFIG
+
+    elif isinstance( config, dict ):
+        config_obj = type( 'Config', (object,), config )
+        return config_obj
+
+    elif isinstance( config, object ):
+        return config
     
-    return d.CONFIG
+    else:
+        raise TypeError('Config type not recognized')
+
+
