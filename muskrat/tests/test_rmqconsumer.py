@@ -1,14 +1,14 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 01/15/2013
+" Last Updated: xx/xx/xx
 "
 """
 import unittest
 from os import path
 import json
 
-from .. import consumer
+from .. import rmqconsumer
 from .. import producer
 
 import pika
@@ -19,7 +19,7 @@ class TestConsumerBase( unittest.TestCase ):
         #Setup a consumer pool
         #Add multiple function definitions
         self.routing_key = 'Muskrat.Queue.Tests' 
-        self.cp = consumer.ConsumerPool()
+        self.cp = rmqconsumer.ConsumerPool()
         self.cp.connect()
         self.module = self.__module__
 
