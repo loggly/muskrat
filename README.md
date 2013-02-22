@@ -1,14 +1,14 @@
 Muskrat
 ======
 
-A python producer-consumer library that provides a persistent multicasting message queue with a simple interface. Originally built ontop of S3 for persistent message queueing that does not require the setup of a broker tool.  Also, has experimental support of multiple brokers.
+A python producer-consumer library that provides a persistent multicasting message queue with a simple interface. Built ontop of S3 to provide persistnet message queueing that does not require installation of broker software.  Muskrat also allows experimental support of using multiple brokers in a tee like fashion.
 
-Currently supports the following brokers: 
+Currently the following brokers are supported:
 
     s3
     RabbitMQ (experimental)
 
-Muskrat also allows Producers to 'tee' messages to multiple brokers.  As an example, a message can be tee'd to write to both RabbitMQ for high-throughput and s3 for message persistence/replay.
+Using multiple brokers allows Producers to 'tee' all messages.  As an example, a message can be tee'd to write to both RabbitMQ for high-throughput and s3 for message persistence/replay.
 
 ###Message Structure
 
@@ -103,7 +103,9 @@ p.send( 'Welcome to General Chat!' )
 
 ###Consumers
 
-Consumers receive messages from the brokers in chronological order and do work with them.  The consumer must be instantiated for the corresponding message broker, ala:
+#####S3 Consumers
+
+Consumers receive messages from the brokers in chronological order and do work with them.  They also allow automatic re-binding to a specific message queue across runs. The consumer must be instantiated for the corresponding message broker, ala:
 
 ```python
 p = Producer( routing_key='Simple.Message.Queue' )
@@ -135,11 +137,11 @@ s3consumer = S3Consumer( 'Simple.Message.Queue', consume_messages )
 s3consumer.consume()
 ```
 
-#####Cursor
+#####S3 Cursor
 
-S3 consumers need to track their own cursor.  This is the routing_key + timestamp of the message.  By default, the cursor is written to a file defined by ```__module__.consumer_function_name``` in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
+S3 consumers need to track their own cursor.  In order to do so they use a simple routing_key + timestamp of the message format.  By default, the cursor is written to a file defined by ```__module__.consumer_function_name``` in the ```cursors``` folder of the muskrat package.  This allows muskrat to pick up and and continue processing messages starting where it last stopped.  Manipulating the cursor also allows for replay of messages or the ability to skip messages.
 
-For the function, ```consume_messages``` run via the ```__main__``` module the cursor would be stored in ```<path to muskrat install>/muskrat/cursors/__main__.consume_messages```.  The file would contain one line consisting of the current state of the consumer as it is proccessing messages.  If the ```consume_message``` is subscribed to the routing key ```Chatserver.General``` then the cursor file contents would be something akin to ```CHATSERVER/GENERAL/2013-01-18T12:23:13.894895```
+Cursors are married to their consumer functions for automatic re-binding.  For the function, ```consume_messages``` run via the ```__main__``` module the cursor would be stored in ```<path to muskrat install>/muskrat/cursors/__main__.consume_messages```.  The file would contain one line consisting of the current state of the consumer as it is proccessing messages.  If the ```consume_message``` is subscribed to the routing key ```Chatserver.General``` then the cursor file contents would be something akin to ```CHATSERVER/GENERAL/2013-01-18T12:23:13.894895```
 
 ###Config
 
