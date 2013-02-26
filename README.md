@@ -87,7 +87,7 @@ for x in range( 1000 ):
 
 #####RabbitMQ Producers (__experimental__)
 
-Utilizes RabbitMQ as a message queueing/brorker service.  Does not guarantee indefinite message persistence or lifecycle polcies.
+Utilizes RabbitMQ as a message queueing/broker service.  Does not guarantee indefinite message persistence or lifecycle polcies.
 
 #####General Producers
 
@@ -119,7 +119,7 @@ from muskrat.s3consumer import Consumer
 def consume_messages( msg ):
     print msg
 
-consume_message.consumer.consume()
+consume_messages.consumer.consume()
 
 stdout >> This is a simple producer-consumer pair
 ```
@@ -145,7 +145,7 @@ Cursors are married to their consumer functions for automatic re-binding.  For t
 
 ###Config
 
-Configuration settings are defined in a python file.  They must define the module level variable CONFIG, which is mapped to the producer or consumer object upon creation. By default, ```config.py``` of ```muskrat/config.py```.
+Configuration settings are defined in a python file, python object, or dict.  If the config is defined via a python file the module level variable CONFIG, which is mapped to the producer or consumer object upon creation, must be defined. By default, muskrat attempts to load ```config.py``` of ```muskrat/config.py```.
 
 ```python
 import os
