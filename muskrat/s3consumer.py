@@ -1,7 +1,6 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/22/2013
 "
 " This class provides the ability to register a function as 
 " a consumer to an S3 routing_key.  This class also handles tracking
@@ -74,8 +73,8 @@ class S3Consumer(object):
     def __init__(self, routing_key, func, name=None, config='config.py'):
 
         self.config = config_loader( config )
-        self.s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
-        self.bucket = self.s3conn.get_bucket( self.config.s3_bucket )
+        self._s3conn = None
+        self._bucket = None
         self.routing_key = routing_key.upper()
         self.callback = func
 
@@ -90,6 +89,18 @@ class S3Consumer(object):
                            location=self.config.s3_cursor['location']
                        )
                                  
+
+    @property
+    def s3conn(self):
+        if self._s3conn is None:
+            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
+        return self._s3conn
+
+    @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.s3conn.get_bucket( self.config.s3_bucket )
+        return self._bucket
     
     def _gen_name(self, func):
         """ Generates a cursor name so that the cursor can be re-attached to """
