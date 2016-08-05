@@ -1,7 +1,6 @@
 """
 " Copyright:    Loggly
 " Author:       Scott Griffin
-" Last Updated: 02/22/2013
 "
 """
 try: import simplejson as json
@@ -83,12 +82,25 @@ class S3Producer( BaseProducer ):
 
     def __init__(self, **kwargs):
         super( S3Producer, self ).__init__(**kwargs)
-        self.s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
+        self._s3conn = None
+        self._bucket = None
 
-        self.bucket = self.s3conn.lookup( self.config.s3_bucket )
+    @property
+    def s3conn(self):
+        if self._s3conn is None:
+            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
+        return self._s3conn
+
+    @property
+    def bucket(self):
+        if self._bucket is None:
+            self._bucket = self.s3conn.lookup( self.config.s3_bucket )
         
-        if not self.bucket:
-            self.bucket = self.s3conn.create_bucket( self.config.s3_bucket )
+            if not self._bucket:
+                self._bucket = self.s3conn.create_bucket( self.config.s3_bucket )
+
+        return self._bucket
+
     
     def send( self, msg, **kwargs ):
         """
