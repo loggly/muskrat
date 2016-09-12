@@ -182,5 +182,13 @@ def simple_consume( msg ):
     print msg
 ```
 
-###TODO
+###TESTING
 
+From the root of this project, run:
+
+```bash
+$ python -m muskrat.tests.test_s3consumer
+$ python -m muskrat.tests.test_producer
+```
+
+###TODO
