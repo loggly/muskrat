@@ -182,6 +182,31 @@ class TestS3CollectionEach(unittest.TestCase):
                 counter += 1
             self.assertEqual(2, counter)
 
+    def test_prefix_match_extra_levels(self):
+        collection = self.bucket.objects.filter(Prefix=self.prefix)
+
+        with TempCursorFile() as path:
+            cursor = S3Cursor.at_path(path)
+
+            # add a message to the queue
+            message1 = str(uuid.uuid4())
+            self._add_message(message1)
+
+            # add a message with extra levels
+            message2 = str(uuid.uuid4())
+            ts = datetime.today().strftime(self.time_format)
+            key = self.prefix + 'FOO/BAR/' + ts
+            self.bucket.put_object(Key=key, Body=message2)
+
+            # iterate over queue, validate message & marker
+            counter = 0
+            for obj in cursor.each(collection):
+                counter += 1
+                last_key = obj.key
+                self.assertEqual(message1, obj.get()['Body'].read())
+            self.assertEqual(1, counter)
+            with open(path, 'r') as f:
+                self.assertEqual(last_key, f.read())
 
 if '__main__' == __name__:
     unittest.main()

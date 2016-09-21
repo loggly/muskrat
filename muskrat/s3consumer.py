@@ -77,7 +77,7 @@ class S3Cursor(object):
         marker = self.get()
         if marker:
             collection = collection.filter(Marker=marker)
-        return collection
+        return collection.filter(Delimiter='/')
 
     def persist_progress(self, collection):
         """Iterates through a collection, maintaining a persistent cursor."""
