@@ -10,7 +10,7 @@
 import os
 import time
 
-import boto
+import boto3
 from   muskrat.util import config_loader
 
 class S3Cursor(object):
@@ -40,6 +40,11 @@ class S3Cursor(object):
         else:
             raise NotImplementedError('File cursor types currently the only types supported')
 
+    @classmethod
+    def at_path(cls, path):
+        """Creates a cursor object at the given path."""
+        name = os.path.basename(path)
+        return cls(name, 'file', location=os.path.dirname(path))
 
     def _update_file_cursor( self, key ):
         #instead of opening and re-opening we could just seek and truncate
@@ -67,14 +72,29 @@ class S3Cursor(object):
     def get( self ):
         return self._get_func()
 
+    def filter_collection(self, collection):
+        """lowlevel helper to filter an s3 object collection with marker."""
+        marker = self.get()
+        if marker:
+            collection = collection.filter(Marker=marker)
+        return collection.filter(Delimiter='/')
+
+    def persist_progress(self, collection):
+        """Iterates through a collection, maintaining a persistent cursor."""
+        for obj in collection:
+            yield obj
+            self.update(obj.key)
+
+    def each(self, collection):
+        collection = self.filter_collection(collection)
+        return self.persist_progress(collection)
+
 
 class S3Consumer(object):
 
     def __init__(self, routing_key, func, name=None, config='config.py'):
 
         self.config = config_loader( config )
-        self._s3conn = None
-        self._bucket = None
         self.routing_key = routing_key.upper()
         self.callback = func
 
@@ -92,15 +112,15 @@ class S3Consumer(object):
 
     @property
     def s3conn(self):
-        if self._s3conn is None:
-            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret )
-        return self._s3conn
+        return boto3.resource(
+            's3',
+            aws_access_key_id=self.config.s3_key,
+            aws_secret_access_key=self.config.s3_secret,
+        )
 
     @property
     def bucket(self):
-        if self._bucket is None:
-            self._bucket = self.s3conn.get_bucket( self.config.s3_bucket )
-        return self._bucket
+        return self.s3conn.Bucket(self.config.s3_bucket)
     
     def _gen_name(self, func):
         """ Generates a cursor name so that the cursor can be re-attached to """
@@ -111,11 +131,8 @@ class S3Consumer(object):
 
     def _get_msg_iterator(self):
         #If marker is not matched to a key then the returned list is none.
-        msg_iterator = self.bucket.list( 
-                            prefix=self._gen_routing_key( self.routing_key ) + '/', 
-                            delimiter= '/',
-                            marker=self._cursor.get() 
-                        )
+        prefix = self._gen_routing_key(self.routing_key) + '/'
+        msg_iterator = self.bucket.objects.filter(Prefix=prefix)
 
         return msg_iterator
 
@@ -125,12 +142,8 @@ class S3Consumer(object):
         #Update: actually... this doesn't seem to be a problem...
         msg_iterator = self._get_msg_iterator()
 
-        for msg in msg_iterator:
-            #Sub 'directories' are prefix objects, so ignore them
-            if isinstance( msg, boto.s3.key.Key ):
-                self.callback( msg.get_contents_as_string() )
-                self._cursor.update( msg.name )
-
+        for obj in self._cursor.each(msg_iterator):
+            self.callback(obj.get()['Body'].read())
 
     def consumption_loop( self, interval=2 ):
         """
@@ -157,14 +170,11 @@ class S3AggregateConsumer( S3Consumer ):
     def consume( self ):
         msg_iterator = self._get_msg_iterator()
 
-        cursor = None
-        messages = []
-        for msg in msg_iterator:
-            if isinstance( msg, boto.s3.key.Key ):
-                messages.append( msg.get_contents_as_string() )
-                cursor = msg.name
+        objs = list(self._cursor.filter_collection(msg_iterator))
+        messages = [x.get()['Body'].read() for x in objs]
 
         if messages:
+            cursor = objs[-1].key
             self.callback( messages )
             self._cursor.update( cursor )
 

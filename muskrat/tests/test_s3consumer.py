@@ -8,16 +8,29 @@
 """
 import unittest
 import os
+import tempfile
+import uuid
+from datetime import datetime
 
 import boto
+import boto3
 
 os.environ['MUSKRAT'] = 'TEST'
 from ..producer   import S3Producer
-from ..s3consumer import S3Consumer, Consumer
+from ..s3consumer import S3Consumer, Consumer, S3Cursor
 from ..util      import config_loader
 
 config_path = 'config.py'
 TEST_KEY_PREFIX = 'Muskrat.Consumer'
+
+class TempCursorFile():
+    def __enter__(self):
+        fd, self.path = tempfile.mkstemp()
+        os.close(fd)
+        return self.path
+
+    def __exit__(self, type, value, traceback):
+        os.remove(self.path)
 
 class TestS3ConsumerBase( unittest.TestCase ):
 
@@ -113,7 +126,87 @@ class TestS3Consumer( TestS3ConsumerBase ):
         self.assertIsInstance( decorated_consumer.consumer, S3Consumer, 'Decorator did not correctly attach S3Consumer' )
         
         decorated_consumer.consumer.consume()
-        
+
+
+class TestS3CollectionEach(unittest.TestCase):
+    def setUp(self):
+        config = config_loader(config_path)
+        self.time_format = config.s3_timestamp_format
+        self.prefix = 'MUSKRAT/TEST/S3COLLECTIONEACH/'
+
+        s3 = boto3.resource(
+            's3',
+            aws_access_key_id=config.s3_key,
+            aws_secret_access_key=config.s3_secret,
+        )
+        self.bucket = s3.Bucket(config.s3_bucket)
+
+    def tearDown(self):
+        for obj in self.bucket.objects.filter(Prefix=self.prefix):
+            obj.delete()
+
+    def _add_message(self, message):
+        key = self.prefix + datetime.today().strftime(self.time_format)
+        self.bucket.put_object(Key=key, Body=message)
+
+    def test_s3collection_marker_each(self):
+        """ An s3collection iterator which persists the marker in a file """
+        collection = self.bucket.objects.filter(Prefix=self.prefix)
+
+        with TempCursorFile() as path:
+            cursor = S3Cursor.at_path(path)
+
+            # add a message to the queue
+            message = str(uuid.uuid4())
+            self._add_message(message)
+
+            # iterate over queue, validate message & marker
+            counter = 0
+            for obj in cursor.each(collection):
+                counter += 1
+                last_key = obj.key
+                self.assertEqual(message, obj.get()['Body'].read())
+            self.assertEqual(1, counter)
+            with open(path, 'r') as f:
+                self.assertEqual(last_key, f.read())
+
+            # add more messages to the queue
+            messages = [str(uuid.uuid4()), str(uuid.uuid4())]
+            self._add_message(messages[0])
+            self._add_message(messages[1])
+
+            # iterate over queue & validate messages
+            counter = 0
+            for obj in cursor.each(collection):
+                self.assertEqual(messages[counter], obj.get()['Body'].read())
+                counter += 1
+            self.assertEqual(2, counter)
+
+    def test_prefix_match_extra_levels(self):
+        collection = self.bucket.objects.filter(Prefix=self.prefix)
+
+        with TempCursorFile() as path:
+            cursor = S3Cursor.at_path(path)
+
+            # add a message to the queue
+            message1 = str(uuid.uuid4())
+            self._add_message(message1)
+
+            # add a message with extra levels
+            message2 = str(uuid.uuid4())
+            ts = datetime.today().strftime(self.time_format)
+            key = self.prefix + 'FOO/BAR/' + ts
+            self.bucket.put_object(Key=key, Body=message2)
+
+            # iterate over queue, validate message & marker
+            counter = 0
+            for obj in cursor.each(collection):
+                counter += 1
+                last_key = obj.key
+                self.assertEqual(message1, obj.get()['Body'].read())
+            self.assertEqual(1, counter)
+            with open(path, 'r') as f:
+                self.assertEqual(last_key, f.read())
 
 if '__main__' == __name__:
     unittest.main()
