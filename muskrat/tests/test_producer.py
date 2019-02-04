@@ -23,6 +23,8 @@ from ..config import TestConfig as config
 
 TEST_KEY_PREFIX = 'Muskrat.Producer'
 
+boto.config.add_section('s3')
+boto.config.set('s3', 'use-sigv4', 'True')
 
 class TestProducerBase( unittest.TestCase ):
 
@@ -70,7 +72,7 @@ class TestS3Producer( TestProducerBase ):
 
     def setUp(self):
         super( TestS3Producer, self ).setUp()
-        self.conn = boto.connect_s3( config.s3_key, config.s3_secret )
+        self.conn = boto.connect_s3( config.s3_key, config.s3_secret, host=config.s3_host )
         self.bucket = self.conn.get_bucket( config.s3_bucket )
         self.key += '.Test.S3Producer'
     
