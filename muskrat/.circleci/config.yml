@@ -1,0 +1,46 @@
+version: 2.1
+
+executors:
+  java:
+    description: "A regular executor based on openjdk image"
+    docker:
+      - image: circleci/openjdk:8-jdk
+
+jobs:
+  whitesource-scan:
+    executor: java
+    
+    steps:
+      - checkout
+
+      - run:
+          name: Install pip
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y python-pip
+      - run:
+          name: Download latest WhiteSource Unified Agent
+          command: curl -LJO https://github.com/whitesource/unified-agent-distribution/releases/latest/download/wss-unified-agent.jar
+      - run:
+          name: Run WhiteSource scan
+          command: java -jar wss-unified-agent.jar -d ~/project -c ~/project/wss-unified-agent.config -apiKey	${API_KEY}
+      - store_artifacts:
+          path: ~/project/whitesource
+
+workflows:
+  version: 2
+  commit:
+    jobs:
+      - whitesource-scan:
+          context: whitesource
+  security-scan:
+    triggers:
+      - schedule:
+          cron: "0 1 * * 0"
+          filters:
+            branches:
+              only:
+                master
+    jobs:
+      - whitesource-scan:
+          context: whitesource
