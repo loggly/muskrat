@@ -1,4 +1,4 @@
-pika==0.9.8
+python3-pika
 boto==2.48.0
 boto3==1.4.0
 simplejson==3.0.7
