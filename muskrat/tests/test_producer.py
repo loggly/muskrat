@@ -9,6 +9,7 @@
 " TODO - Implement RabbitMQ producer and Kafka
 "
 """
+from __future__ import absolute_import
 import unittest
 import re
 import os

@@ -3,6 +3,7 @@
 " Author:       Scott Griffin
 "
 """
+from __future__ import absolute_import
 from setuptools import setup
 from muskrat import __version__
 

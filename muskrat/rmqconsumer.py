@@ -7,6 +7,7 @@
 " underlying RabbitMQ connection interface for receiving messages.
 "
 """
+from __future__ import absolute_import
 import exceptions
 from collections import defaultdict
 from functools   import wraps

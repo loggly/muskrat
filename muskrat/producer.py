@@ -3,10 +3,12 @@
 " Author:       Scott Griffin
 "
 """
+from __future__ import absolute_import
+from six.moves import range
 try: import simplejson as json
 except ImportError: import json
 
-import Queue
+import six.moves.queue
 import threading
 from   datetime   import datetime
 
@@ -153,7 +155,7 @@ class S3WriteThread( threading.Thread ):
                 msg, s3key = self.queue.get( True, self.timeout )
                 s3key.set_contents_from_string( msg )
                 self.queue.task_done()
-        except Queue.Empty:
+        except six.moves.queue.Empty:
             #queue.get() timeout will cause this exception and mean we are done
             #with our messages, so exit the thread.
             pass
@@ -169,7 +171,7 @@ class ThreadedS3Producer( S3Producer ):
     Defaults to a thread pool of 20 threads.
     """
     def __init__(self, *args, **kwargs):
-        self.queue = Queue.Queue()
+        self.queue = six.moves.queue.Queue()
         self.num_threads = kwargs.pop( 'num_threads', 20 )
         self.threads = []
         super( ThreadedS3Producer, self ).__init__( **kwargs )
