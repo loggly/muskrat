@@ -90,6 +90,7 @@ class S3Producer( BaseProducer ):
     @property
     def s3conn(self):
         if self._s3conn is None:
+            self._s3conn = boto.s3.connection.OrdinaryCallingFormat
             self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret, host=self.config.s3_host )
         return self._s3conn
 
