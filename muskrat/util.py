@@ -6,6 +6,7 @@
 " Common routines for muskrat.
 "
 """
+from __future__ import absolute_import
 import imp
 import os
 
@@ -30,8 +31,8 @@ def config_loader( config ):
         d.__file__ = config
 
         try:
-            execfile(config, d.__dict__)
-        except IOError, e:
+            exec(compile(open(config, "rb").read(), config, 'exec'), d.__dict__)
+        except IOError as e:
             e.strerror = 'Unable to load configuration file (%s)' % e.strerror
             raise
         
