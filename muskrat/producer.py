@@ -92,7 +92,7 @@ class S3Producer( BaseProducer ):
     @property
     def s3conn(self):
         if self._s3conn is None:
-            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret, host=self.config.s3_host)
+            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret, host=self.config.s3_host, calling_format=OrdinaryCallingFormat())
         return self._s3conn
 
     @property
@@ -102,7 +102,7 @@ class S3Producer( BaseProducer ):
         logging.info(self.config.s3_bucket)
 
         if self._bucket is None:
-            self._bucket = self.s3conn.lookup( 'internal-analytics-qa-sv4' )
+            self._bucket = self.s3conn.lookup( self.config.s3_bucket )
         
             if not self._bucket:
                 self._bucket = self.s3conn.create_bucket( self.config.s3_bucket )
