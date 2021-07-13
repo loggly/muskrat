@@ -15,6 +15,7 @@ from   datetime   import datetime
 import pika
 import boto
 from   muskrat.util import config_loader
+from boto.s3.connection import OrdinaryCallingFormat
 
 class BaseProducer(object):
     """
@@ -90,7 +91,7 @@ class S3Producer( BaseProducer ):
     @property
     def s3conn(self):
         if self._s3conn is None:
-            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret, host=self.config.s3_host, calling_format=boto.s3.connection.OrdinaryCallingFormat)
+            self._s3conn = boto.connect_s3( self.config.s3_key, self.config.s3_secret, host=self.config.s3_host, calling_format=OrdinaryCallingFormat)
         return self._s3conn
 
     @property
