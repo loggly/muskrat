@@ -100,9 +100,9 @@ class S3Producer( BaseProducer ):
         logging.info('111111111111111111111111111111111')
         logging.info(self.config)
         logging.info(self.config.s3_bucket)
-                
+
         if self._bucket is None:
-            self._bucket = self.s3conn.lookup( self.config.s3_bucket )
+            self._bucket = self.s3conn.lookup( 'internal-analytics-qa-sv4' )
         
             if not self._bucket:
                 self._bucket = self.s3conn.create_bucket( self.config.s3_bucket )
