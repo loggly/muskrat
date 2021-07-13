@@ -16,6 +16,7 @@ import pika
 import boto
 from   muskrat.util import config_loader
 from boto.s3.connection import OrdinaryCallingFormat
+import logging
 
 class BaseProducer(object):
     """
@@ -96,6 +97,10 @@ class S3Producer( BaseProducer ):
 
     @property
     def bucket(self):
+        logging.info('111111111111111111111111111111111')
+        logging.info(self.config)
+        logging.info(self.config.s3_bucket)
+                
         if self._bucket is None:
             self._bucket = self.s3conn.lookup( self.config.s3_bucket )
         
