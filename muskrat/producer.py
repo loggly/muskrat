@@ -16,7 +16,6 @@ import pika
 import boto
 from   muskrat.util import config_loader
 from boto.s3.connection import OrdinaryCallingFormat
-import logging
 
 class BaseProducer(object):
     """
