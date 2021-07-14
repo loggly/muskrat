@@ -3,3 +3,4 @@ dist
 cursors
 *.egg*
 config.py
+.idea
